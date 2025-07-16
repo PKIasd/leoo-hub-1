@@ -1,4 +1,4 @@
--- Criação de serviços úteis
+-- Serviços necessários
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -7,7 +7,7 @@ local Lighting = game:GetService("Lighting")
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
--- Função para criar objetos de forma simplificada
+-- Função para criação simplificada
 local function create(class, props)
 	local obj = Instance.new(class)
 	for i, v in pairs(props) do
@@ -16,14 +16,14 @@ local function create(class, props)
 	return obj
 end
 
--- Criando a bola cinza flutuante
+-- Gui Principal
 local screenGui = create("ScreenGui", {
 	Name = "LeooHubGui",
 	ResetOnSpawn = false,
 	Parent = player:WaitForChild("PlayerGui")
 })
 
--- Bola cinza (botão)
+-- Bola cinza flutuante
 local toggleButton = create("TextButton", {
 	Name = "ToggleButton",
 	Parent = screenGui,
@@ -35,7 +35,7 @@ local toggleButton = create("TextButton", {
 	Active = true
 })
 
--- O HUB principal
+-- HUB
 local hubFrame = create("Frame", {
 	Name = "HubFrame",
 	Parent = screenGui,
@@ -48,7 +48,7 @@ local hubFrame = create("Frame", {
 })
 
 -- Título
-local title = create("TextLabel", {
+create("TextLabel", {
 	Parent = hubFrame,
 	Size = UDim2.new(1, 0, 0, 30),
 	BackgroundTransparency = 1,
@@ -58,81 +58,136 @@ local title = create("TextLabel", {
 	TextSize = 20
 })
 
--- Lista de funções do hub
+-- Estados das opções (toggle)
+local optionStates = {
+	["pulos infinito"] = false,
+	["noclip"] = false,
+	["fly"] = false,
+	["velocidade 100"] = false,
+	["esp"] = false,
+	["visao no escuro"] = false,
+	["teleporte"] = false,
+	["godmode"] = false,
+	["no slow"] = false,
+	["creditos"] = false
+}
+
+-- Armazenar conexões para desconectar depois
+local activeConnections = {}
+
+-- Lógica das opções
+local function toggleOption(name)
+	local state = optionStates[name]
+	optionStates[name] = not state
+
+	if name == "pulos infinito" then
+		if not state then
+			activeConnections["jump"] = RunService.RenderStepped:Connect(function()
+				player.Character.Humanoid.JumpPower = 150
+			end)
+		else
+			if activeConnections["jump"] then activeConnections["jump"]:Disconnect() end
+			player.Character.Humanoid.JumpPower = 50
+		end
+
+	elseif name == "noclip" then
+		if not state then
+			activeConnections["noclip"] = RunService.Stepped:Connect(function()
+				for _, part in pairs(player.Character:GetDescendants()) do
+					if part:IsA("BasePart") then part.CanCollide = false end
+				end
+			end)
+		else
+			if activeConnections["noclip"] then activeConnections["noclip"]:Disconnect() end
+		end
+
+	elseif name == "fly" then
+		if not state then
+			local root = player.Character:FindFirstChild("HumanoidRootPart")
+			if root then
+				local bp = Instance.new("BodyPosition", root)
+				bp.Name = "FlyPosition"
+				bp.MaxForce = Vector3.new(400000, 400000, 400000)
+				activeConnections["fly"] = RunService.RenderStepped:Connect(function()
+					bp.Position = root.Position + Vector3.new(0, 10, 0)
+				end)
+			end
+		else
+			if activeConnections["fly"] then activeConnections["fly"]:Disconnect() end
+			local root = player.Character:FindFirstChild("HumanoidRootPart")
+			if root then
+				local bp = root:FindFirstChild("FlyPosition")
+				if bp then bp:Destroy() end
+			end
+		end
+
+	elseif name == "velocidade 100" then
+		player.Character.Humanoid.WalkSpeed = state and 16 or 100
+
+	elseif name == "esp" then
+		for _, p in pairs(Players:GetPlayers()) do
+			if p ~= player and p.Character then
+				for _, part in pairs(p.Character:GetChildren()) do
+					if part:IsA("BasePart") then
+						part.BrickColor = state and BrickColor.Random() or BrickColor.Gray()
+					end
+				end
+			end
+		end
+
+	elseif name == "visao no escuro" then
+		Lighting.ClockTime = state and 0 or 14
+		Lighting.Brightness = state and 1 or 2
+
+	elseif name == "teleporte" then
+		if not state then
+			activeConnections["teleport"] = mouse.KeyDown:Connect(function(key)
+				if key == "y" and mouse.Hit then
+					player.Character:SetPrimaryPartCFrame(mouse.Hit + Vector3.new(0, 5, 0))
+				end
+			end)
+		else
+			if activeConnections["teleport"] then activeConnections["teleport"]:Disconnect() end
+		end
+
+	elseif name == "godmode" then
+		if not state then
+			activeConnections["god"] = player.Character.Humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+				player.Character.Humanoid.Health = 100
+			end)
+		else
+			if activeConnections["god"] then activeConnections["god"]:Disconnect() end
+		end
+
+	elseif name == "no slow" then
+		if not state then
+			activeConnections["noslow"] = player.Character:FindFirstChildOfClass("Humanoid").StateChanged:Connect(function(old, new)
+				if new == Enum.HumanoidStateType.Physics then
+					player.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Running)
+				end
+			end)
+		else
+			if activeConnections["noslow"] then activeConnections["noslow"]:Disconnect() end
+		end
+
+	elseif name == "creditos" then
+		if not state then
+			local msg = Instance.new("Message", workspace)
+			msg.Text = "Feito por: leoo :)"
+			wait(3)
+			msg:Destroy()
+			optionStates["creditos"] = false
+		end
+	end
+end
+
+-- Lista de botões
 local options = {
 	"pulos infinito", "noclip", "fly", "velocidade 100", "esp", "visao no escuro",
 	"teleporte", "godmode", "no slow", "creditos"
 }
 
--- Funções de cada botão (simples para testes locais)
-local function activateOption(name)
-	if name == "pulos infinito" then
-		player.Character.Humanoid.JumpPower = 100
-		player.Character.Humanoid.UseJumpPower = true
-	elseif name == "noclip" then
-		RunService.Stepped:Connect(function()
-			if noclipActive then
-				for _, part in pairs(player.Character:GetDescendants()) do
-					if part:IsA("BasePart") then
-						part.CanCollide = false
-					end
-				end
-			end
-		end)
-		noclipActive = not noclipActive
-	elseif name == "fly" then
-		-- Simples fly (melhor com módulos avançados)
-		local bp = Instance.new("BodyPosition", player.Character.HumanoidRootPart)
-		bp.Position = player.Character.HumanoidRootPart.Position + Vector3.new(0, 10, 0)
-		bp.MaxForce = Vector3.new(400000, 400000, 400000)
-		wait(3)
-		bp:Destroy()
-	elseif name == "velocidade 100" then
-		player.Character.Humanoid.WalkSpeed = 100
-	elseif name == "esp" then
-		for _, p in pairs(Players:GetPlayers()) do
-			if p ~= player and p.Character then
-				p.Character:FindFirstChildOfClass("Humanoid").DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
-				for _, part in pairs(p.Character:GetChildren()) do
-					if part:IsA("BasePart") then
-						part.BrickColor = BrickColor.Gray()
-					end
-				end
-			end
-		end
-	elseif name == "visao no escuro" then
-		Lighting.Brightness = 2
-		Lighting.ClockTime = 14
-	elseif name == "teleporte" then
-		mouse.KeyDown:Connect(function(key)
-			if key == "y" then
-				if mouse.Hit then
-					player.Character:SetPrimaryPartCFrame(mouse.Hit + Vector3.new(0, 5, 0))
-				end
-			end
-		end)
-	elseif name == "godmode" then
-		player.Character.Humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-			player.Character.Humanoid.Health = 100
-		end)
-	elseif name == "no slow" then
-		local hum = player.Character:FindFirstChildOfClass("Humanoid")
-		if hum then
-			hum.StateChanged:Connect(function(old, new)
-				if new == Enum.HumanoidStateType.Physics then
-					hum:ChangeState(Enum.HumanoidStateType.Running)
-				end
-			end)
-		end
-	elseif name == "creditos" then
-		local msg = Instance.new("Message", workspace)
-		msg.Text = "Feito por: leoo :)"
-		wait(3)
-		msg:Destroy()
-	end
-end
-
--- Criar os botões no hub
+-- Criação dos botões no Hub
 for i, name in ipairs(options) do
 	local btn = create("TextButton", {
 		Parent = hubFrame,
@@ -144,13 +199,12 @@ for i, name in ipairs(options) do
 		Font = Enum.Font.SourceSans,
 		TextSize = 18
 	})
-
 	btn.MouseButton1Click:Connect(function()
-		activateOption(name)
+		toggleOption(name)
 	end)
 end
 
--- Abrir/fechar o hub clicando na bola
+-- Alternar visibilidade do Hub
 toggleButton.MouseButton1Click:Connect(function()
 	hubFrame.Visible = not hubFrame.Visible
 end)
